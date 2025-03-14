@@ -1,114 +1,94 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
-const { dialog } = require('electron');
-const fs = require('fs');
-const path = require('path');
-const { PDFDocument } = require('pdf-lib');  // for PDF manipulation
+const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const fs = require("fs");
+const path = require("path");
 
 let mainWindow;
 
+const createWindow = () => {
+  mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      preload: path.join(__dirname, "renderer.js"),
+    },
+  });
+  mainWindow.loadURL("https://manganato.info/");
+  mainWindow.on("closed", () => (mainWindow = null));
+};
+
 app.whenReady().then(() => {
-    mainWindow = new BrowserWindow({
-        width: 1280,
-        height: 800,
-        webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
-            preload: path.join(__dirname, 'renderer.js')
-        }
-    });
-
-    mainWindow.loadURL('https://manganato.info/');
-
-    mainWindow.webContents.once('did-finish-load', () => {
-        console.log("✅ Page fully loaded.");
-    });
-
-    mainWindow.on('closed', () => {
-        mainWindow = null;
-    });
+  createWindow();
+  mainWindow.webContents.once("did-finish-load", () => {
+    console.log("✅ Page loaded.");
+  });
 });
 
-app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-        app.quit();
-    }
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
 });
 
-app.on('activate', () => {
-    if (mainWindow === null) {
-        mainWindow = new BrowserWindow({
-            width: 1280,
-            height: 800,
-            webPreferences: {
-                nodeIntegration: true,
-                contextIsolation: false,
-                preload: path.join(__dirname, 'renderer.js')
-            }
-        });
-        mainWindow.loadURL('https://manganato.info/');
-    }
+app.on("activate", () => {
+  if (!mainWindow) createWindow();
 });
 
-// Utility function: remove first and last pages from a PDF buffer.
-async function removeFirstAndLastPages(pdfBuffer) {
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
-    const totalPages = pdfDoc.getPageCount();
-    if (totalPages <= 2) {
-        console.log("PDF has 2 or fewer pages; not removing any pages.");
-        return pdfBuffer;
-    }
-    // Remove the last page first, then the first page.
-    pdfDoc.removePage(totalPages - 1);
-    pdfDoc.removePage(0);
-    return await pdfDoc.save();
-}
-
-// Handle PDF Download: print page to PDF, remove first and last pages, then prompt for saving.
-ipcMain.on('download-pdf', async (event) => {
-    console.log("📂 Download request received... Generating PDF in memory.");
-
-    let pdfData;
-    try {
-        pdfData = await mainWindow.webContents.printToPDF({
-            marginsType: 1,
-            printBackground: true,
-            pageSize: 'A4'
-        });
-    } catch (error) {
-        console.error("❌ Error generating PDF:", error);
-        return;
-    }
-
-    // Remove first and last pages from the generated PDF.
-    try {
-        pdfData = await removeFirstAndLastPages(pdfData);
-        console.log("✅ Removed first and last pages from PDF.");
-    } catch (error) {
-        console.error("❌ Error removing pages from PDF:", error);
-    }
-
-    console.log("✅ PDF generated in memory. Opening Save Dialog.");
-
-    const { filePath, canceled } = await dialog.showSaveDialog({
-        title: 'Save PDF',
-        defaultPath: path.join(app.getPath('downloads'), 'manga-page.pdf'),
-        filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+ipcMain.on("download-pdf", async () => {
+  let pdfData;
+  try {
+    pdfData = await mainWindow.webContents.printToPDF({
+      marginsType: 1,
+      printBackground: true,
+      pageSize: "A4",
     });
+  } catch (error) {
+    console.error("❌ Error generating PDF:", error);
+    return;
+  }
 
-    // If the user cancels or no filePath is returned, save to the default location.
-    let finalPath = filePath;
-    if (canceled || !filePath) {
-        finalPath = path.join(app.getPath('downloads'), 'manga-page.pdf');
-        console.log("⚠️ No file selected. Saving PDF to default location:", finalPath);
-    } else {
-        console.log("✅ Saving PDF to:", finalPath);
-    }
+  // Get the page title  and chapter
+  const pageTitle = mainWindow.getTitle().toLowerCase();
+  console.log("Page title:", pageTitle);
 
-    fs.writeFile(finalPath, pdfData, (err) => {
-        if (err) {
-            console.error("❌ Error saving PDF:", err);
-        } else {
-            console.log("🎉 PDF saved successfully at:", finalPath);
-        }
-    });
+  const chapterRegex = /chapter\s*([\d]+)/i;
+  let mangaName = "";
+  let chapterName = "";
+  const match = pageTitle.match(chapterRegex);
+  if (match) {
+    mangaName = pageTitle.substring(0, match.index).trim();
+    chapterName = "ch" + match[1].trim();
+  } else {
+    mangaName = pageTitle.trim();
+    chapterName = "";
+  }
+
+  // Name sanitization
+  const safeMangaName = mangaName
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
+  let fileName = "";
+  if (chapterName) {
+    const safeChapterName = chapterName
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "");
+    fileName = `[MangaVerse] ${safeMangaName}-${safeChapterName}.pdf`;
+  } else {
+    fileName = `[MangaVerse] ${safeMangaName}.pdf`;
+  }
+
+  const { filePath, canceled } = await dialog.showSaveDialog({
+    title: "Save PDF",
+    defaultPath: path.join(app.getPath("downloads"), fileName),
+    filters: [{ name: "PDF Files", extensions: ["pdf"] }],
+  });
+
+  const finalPath =
+    canceled || !filePath
+      ? path.join(app.getPath("downloads"), fileName)
+      : filePath;
+
+  fs.writeFile(finalPath, pdfData, (err) => {
+    if (err) console.error("❌ Error saving PDF:", err);
+    else console.log("🎉 PDF saved at:", finalPath);
+  });
 });

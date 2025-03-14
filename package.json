@@ -1,25 +1,24 @@
 {
-    "name": "manga-app",
-    "version": "1.0.0",
-    "description": "Manga app based on manganato.info",
-    "main": "main.js",
-    "scripts": {
-      "start": "electron .",
-      "dist": "electron-builder"
-    },
-    "build": {
-      "appId": "com.siddhartha412.mangaapp",
-      "productName": "Manga App",
-      "win": {
-        "target": "nsis"
-      }
-    },
-    "dependencies": {
-      "pdf-lib": "^1.17.1"
-    },
-    "devDependencies": {
-      "electron": "^25.0.0",
-      "electron-builder": "^24.3.0"
+  "name": "manga-app",
+  "version": "1.0.0",
+  "description": "Manga app based on manganato.info",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.siddhartha412.mangaapp",
+    "productName": "Manga App",
+    "win": {
+      "target": "nsis"
     }
+  },
+  "dependencies": {
+    "package.json": "^2.0.1"
+  },
+  "devDependencies": {
+    "electron": "^25.0.0",
+    "electron-builder": "^24.3.0"
   }
-  
+}
